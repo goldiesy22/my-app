@@ -1,6 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 from audio_recorder_streamlit import audio_recorder
+from collections import Counter
 import io
 
 # 💡 깃허브 유출 방지: API 키를 직접 적지 않고 Streamlit의 비밀 금고(Secrets)에서 가져옵니다.
@@ -41,7 +42,7 @@ if mode == "학생용":
             target_word = "보" # 연습할 정답 글자
             st.markdown(f"<h1 style='text-align: center; font-size: 100px;'>{target_word}</h1>", unsafe_allow_html=True)
             
-            st.info("👇 마이크를 누르고 **아이콘이 빨간색으로 변하면** 말하세요. (말한 뒤 마이크를 한 번 더 누르면 완료됩니다)")
+            st.info("👇 마이크를 누르고 **아이콘이 빨간색으로 변하면** 글자를 읽어보세요. (한 번만 읽어도 되고, 여러 번 반복해서 읽어도 좋아요!)")
             
             audio_bytes = audio_recorder(
                 text="클릭해서 녹음 시작", 
@@ -57,23 +58,32 @@ if mode == "학생용":
                     audio_file.name = "record.wav"
                     
                     try:
-                        # 음성 인식(STT) - 한국어 고정 및 한 글자 인식용 프롬프트 힌트 제공
+                        # 음성 인식(STT) - 단음절 및 반복 발음 모두 대응하도록 프롬프트 설정
                         transcript = client.audio.transcriptions.create(
                             model="whisper-1", 
                             file=audio_file,
                             language="ko",
-                            prompt="보, 바, 가, 나, 다. 짧은 한 글자 단독 발음입니다."
+                            prompt="보. 보, 보, 보. 바, 바, 바. 한 글자 단독 발음 또는 같은 글자 반복 발음입니다."
                         )
                         
-                        # 공백이나 특수기호 제거
-                        spoken_text = transcript.text.strip().replace(" ", "").replace(".", "")
+                        spoken_text = transcript.text.strip()
                         st.info(f"🎤 학생이 낸 소리: **{spoken_text}**")
                         
-                        if target_word in spoken_text: 
-                            st.success("🎉 참 잘했어요! 정확하게 읽었네요!")
-                        else:
-                            # 자음, 모음 분리 로직
-                            if len(spoken_text) > 0 and '가' <= spoken_text[0] <= '힣':
+                        # 인식된 결과에서 한글 완성형 음절('가'~'힣')만 추출
+                        hangul_chars = [ch for ch in spoken_text if '가' <= ch <= '힣']
+                        
+                        if len(hangul_chars) > 0:
+                            # 발음된 글자별 빈도수 계산 (최빈값 판정)
+                            counts = Counter(hangul_chars)
+                            max_count = counts.most_common(1)[0][1]
+                            
+                            # 정답 글자가 가장 많이 인식되었거나(동점 포함) 단독으로 정확히 인식된 경우
+                            if counts[target_word] == max_count:
+                                st.success("🎉 참 잘했어요! 정확하게 읽었네요!")
+                            else:
+                                # 가장 많이 잘못 읽은 글자를 대표 오답으로 선택
+                                spoken_char = counts.most_common(1)[0][0]
+                                
                                 CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
                                 JUNGSUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
                                 
@@ -81,22 +91,21 @@ if mode == "학생용":
                                 target_cho = CHOSUNG[target_code // 588]
                                 target_jung = JUNGSUNG[(target_code % 588) // 28]
                                 
-                                spoken_char = spoken_text[0]
                                 spoken_code = ord(spoken_char) - ord('가')
                                 spoken_cho = CHOSUNG[spoken_code // 588]
                                 spoken_jung = JUNGSUNG[(spoken_code % 588) // 28]
                                 
                                 if spoken_cho != target_cho and spoken_jung == target_jung:
-                                    st.error("💡 아쉽지만 자음을 잘못 읽었어요.")
+                                    st.error(f"💡 주로 '{spoken_char}'(으)로 읽었네요. 아쉽지만 자음을 잘못 읽었어요.")
                                     st.markdown(f"<h3 style='text-align: center;'>정답은 <span style='color: red;'>{target_cho}</span> + {target_jung} 예요. 다시 읽어볼까요?</h3>", unsafe_allow_html=True)
                                 elif spoken_cho == target_cho and spoken_jung != target_jung:
-                                    st.error("💡 아쉽지만 모음을 잘못 읽었어요.")
+                                    st.error(f"💡 주로 '{spoken_char}'(으)로 읽었네요. 아쉽지만 모음을 잘못 읽었어요.")
                                     st.markdown(f"<h3 style='text-align: center;'>정답은 {target_cho} + <span style='color: blue;'>{target_jung}</span> 예요. 다시 읽어볼까요?</h3>", unsafe_allow_html=True)
                                 else:
-                                    st.error("💡 자음과 모음을 모두 잘못 읽었어요.")
+                                    st.error(f"💡 주로 '{spoken_char}'(으)로 읽었네요. 자음과 모음을 모두 잘못 읽었어요.")
                                     st.markdown(f"<h3 style='text-align: center;'>정답은 <span style='color: red;'>{target_cho}</span> + <span style='color: blue;'>{target_jung}</span> 예요. 모양을 잘 보세요!</h3>", unsafe_allow_html=True)
-                            else:
-                                st.error("💡 무슨 말인지 잘 못 들었어요. 다시 크고 또박또박 말해볼까요?")
+                        else:
+                            st.error("💡 무슨 말인지 잘 못 들었어요. 다시 크고 또박또박 말해볼까요?")
                                 
                     except Exception as e:
                         st.warning("⚠️ 녹음된 소리가 너무 짧거나 마이크가 인식되지 않았어요. 마이크 연결과 권한을 확인해 주세요!")
