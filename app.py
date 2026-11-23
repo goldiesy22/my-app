@@ -2,6 +2,8 @@ import streamlit as st
 from openai import OpenAI
 from audio_recorder_streamlit import audio_recorder
 from collections import Counter
+from datetime import datetime
+import pandas as pd
 import io
 import random
 
@@ -109,18 +111,15 @@ def generate_compare_numbers(stage, exclude_pair=None):
     while True:
         if stage == 1:
             a = random.randint(1, 9)
-            # 가끔 같은 숫자도 출제 (약 15% 확률)
             b = a if random.random() < 0.15 else random.randint(1, 9)
         elif stage == 2:
             one_digit = random.randint(1, 9)
             two_digit = random.randint(10, 99)
-            # (한 자릿수, 두 자릿수) 또는 (두 자릿수, 한 자릿수) 무작위 배치
             if random.choice([True, False]):
                 a, b = one_digit, two_digit
             else:
                 a, b = two_digit, one_digit
         else:
-            # 50% 확률로 십의 자리가 같은 수를 출제해 일의 자리 비교까지 훈련
             if random.random() < 0.5:
                 tens = random.randint(1, 9)
                 a = tens * 10 + random.randint(0, 9)
@@ -157,8 +156,44 @@ def generate_word_problem(exclude_text=None):
             return prob
 
 # ==========================================
+# 4. 학습 이력 기록(Logging) 및 샘플 데이터
+# ==========================================
+def log_attempt(subject, activity, question, student_answer, is_correct, error_type, hint_used=False):
+    """학생의 풀이 기록을 세션 상태에 저장"""
+    st.session_state.learning_logs.insert(0, {
+        "시간": datetime.now().strftime("%H:%M:%S"),
+        "영역": subject,
+        "활동": activity,
+        "문제": question,
+        "학생 응답": student_answer,
+        "결과": "정답" if is_correct else "오답",
+        "오류 유형": "없음" if is_correct else error_type,
+        "힌트 사용": "사용" if hint_used else "미사용"
+    })
+
+SAMPLE_LOGS = [
+    {"시간": "09:12:10", "영역": "국어", "활동": "비슷한 글자 찾기", "문제": "보", "학생 응답": "포", "결과": "오답", "오류 유형": "자음(첫소리) 오류", "힌트 사용": "미사용"},
+    {"시간": "09:12:45", "영역": "국어", "활동": "비슷한 글자 찾기", "문제": "보", "학생 응답": "보", "결과": "정답", "오류 유형": "없음", "힌트 사용": "미사용"},
+    {"시간": "09:13:20", "영역": "국어", "활동": "비슷한 글자 찾기", "문제": "구", "학생 응답": "고", "결과": "오답", "오류 유형": "모음(가운뎃소리) 오류", "힌트 사용": "미사용"},
+    {"시간": "09:14:05", "영역": "국어", "활동": "비슷한 글자 찾기", "문제": "달", "학생 응답": "다", "결과": "오답", "오류 유형": "받침(끝소리) 오류", "힌트 사용": "미사용"},
+    {"시간": "09:15:00", "영역": "국어", "활동": "비슷한 글자 찾기", "문제": "달", "학생 응답": "달", "결과": "정답", "오류 유형": "없음", "힌트 사용": "미사용"},
+    {"시간": "09:16:12", "영역": "국어", "활동": "띄어 읽기 연습", "문제": "아버지가 방에 들어가신다.", "학생 응답": "아버지 가방에 들어가신다", "결과": "오답", "오류 유형": "띄어 읽기 오류", "힌트 사용": "사용"},
+    {"시간": "09:16:50", "영역": "국어", "활동": "띄어 읽기 연습", "문제": "아버지가 방에 들어가신다.", "학생 응답": "아버지가 방에 들어가신다", "결과": "정답", "오류 유형": "없음", "힌트 사용": "사용"},
+    {"시간": "09:18:10", "영역": "국어", "활동": "띄어 읽기 연습", "문제": "나비가 날아간다.", "학생 응답": "나비가 날아간다", "결과": "정답", "오류 유형": "없음", "힌트 사용": "미사용"},
+    {"시간": "09:20:05", "영역": "수학", "활동": "수 크기 비교", "문제": "9 ○ 14", "학생 응답": "크다 (>)", "결과": "오답", "오류 유형": "자릿수 비교 오류", "힌트 사용": "미사용"},
+    {"시간": "09:20:40", "영역": "수학", "활동": "수 크기 비교", "문제": "9 ○ 14", "학생 응답": "작다 (<)", "결과": "정답", "오류 유형": "없음", "힌트 사용": "미사용"},
+    {"시간": "09:21:15", "영역": "수학", "활동": "수 크기 비교", "문제": "27 ○ 23", "학생 응답": "크다 (>)", "결과": "정답", "오류 유형": "없음", "힌트 사용": "미사용"},
+    {"시간": "09:22:30", "영역": "수학", "활동": "문장제 식 세우기", "문제": "사탕이 6개 있었습니다. 그중에서 2개를 먹었습니다. 남은 사탕은 몇 개일까요?", "학생 응답": "6 + 2 = 8", "결과": "오답", "오류 유형": "연산 기호(+/-) 오류", "힌트 사용": "미사용"},
+    {"시간": "09:23:18", "영역": "수학", "활동": "문장제 식 세우기", "문제": "사탕이 6개 있었습니다. 그중에서 2개를 먹었습니다. 남은 사탕은 몇 개일까요?", "학생 응답": "[그림 힌트] - 4", "결과": "정답", "오류 유형": "없음", "힌트 사용": "사용"},
+    {"시간": "09:24:10", "영역": "수학", "활동": "문장제 식 세우기", "문제": "사과가 3개, 배가 2개 있습니다. 모두 몇 개일까요?", "학생 응답": "3 + 2 = 5", "결과": "정답", "오류 유형": "없음", "힌트 사용": "미사용"},
+]
+
+# ==========================================
 # 세션 상태(Session State) 초기화
 # ==========================================
+if "learning_logs" not in st.session_state:
+    st.session_state.learning_logs = []
+
 # [국어 1] 비슷한 글자 찾기 상태
 if "k1_stage" not in st.session_state:
     st.session_state.k1_stage = 1
@@ -201,7 +236,7 @@ if "m1_q_count" not in st.session_state:
 
 # [수학 2] 문장제 상태
 if "m2_prob" not in st.session_state:
-    st.session_state.m2_prob = WORD_PROBLEMS[0]  # 첫 문제는 기본 사과/배 예시로 시작
+    st.session_state.m2_prob = WORD_PROBLEMS[0]
 if "m2_show_hint" not in st.session_state:
     st.session_state.m2_show_hint = False
 if "m2_solved" not in st.session_state:
@@ -329,6 +364,7 @@ if mode == "학생용":
                                 max_count = counts.most_common(1)[0][1]
                                 
                                 if counts[target_word] == max_count:
+                                    log_attempt("국어", "비슷한 글자 찾기", target_word, spoken_text, True, "없음")
                                     st.session_state.k1_solved = True
                                     st.session_state.k1_last_spoken = spoken_text
                                     st.session_state.k1_streak += 1
@@ -367,6 +403,7 @@ if mode == "학생용":
                                         wrong_parts.append("받침(끝소리)")
                                     
                                     wrong_desc = ", ".join(wrong_parts)
+                                    log_attempt("국어", "비슷한 글자 찾기", target_word, spoken_char, False, f"{wrong_desc} 오류")
                                     st.error(f"💡 주로 '{spoken_char}'(으)로 읽었네요. 아쉽지만 **{wrong_desc}** 부분을 잘못 읽었어요.")
                                     
                                     cho_html = f"<span style='color: red;'>{target_cho}</span>" if not cho_ok else target_cho
@@ -483,11 +520,15 @@ if mode == "학생용":
                             target_words = clean_target_2.split()
                             
                             if spoken_words == target_words:
+                                log_attempt("국어", "띄어 읽기 연습", target_sentence, clean_spoken_2, True, "없음", hint_used=st.session_state.show_slash_hint)
                                 st.session_state.k2_solved = True
                                 st.session_state.k2_last_spoken = clean_spoken_2
                                 st.session_state.show_slash_hint = False
                                 st.rerun()
                             else:
+                                err_type = "띄어 읽기 오류" if "".join(spoken_words) == "".join(target_words) else "어절·띄어 읽기 오류"
+                                log_attempt("국어", "띄어 읽기 연습", target_sentence, clean_spoken_2, False, err_type, hint_used=st.session_state.show_slash_hint)
+                                
                                 st.session_state.show_slash_hint = True
                                 slashed_sentence = format_slash_hint(target_sentence)
                                 text_placeholder.markdown(f"<h2 style='text-align: center; color: #FF4B4B; margin: 20px 0;'>{slashed_sentence}</h2>", unsafe_allow_html=True)
@@ -526,7 +567,6 @@ if mode == "학생용":
         if math_choice == "1. 알맞은 말과 기호 찾기":
             st.subheader("1. 알맞은 말과 기호 찾기")
             
-            # 1~2학년 수준 3단계 난이도 선택
             m1_options = [
                 "1단계: 한 자릿수끼리 비교",
                 "2단계: 한 자릿수와 두 자릿수 비교",
@@ -581,19 +621,25 @@ if mode == "학생용":
                     if user_answer == "선택하세요":
                         st.warning("알맞은 말과 기호를 먼저 선택해 줘.")
                     elif user_answer == correct_choice:
+                        log_attempt("수학", "수 크기 비교", f"{num_left} ○ {num_right}", user_answer, True, "없음")
                         st.session_state.m1_solved = True
                         st.rerun()
                     else:
-                        # 단계별 자릿값 원리 맞춤형 피드백
                         if st.session_state.m1_stage == 2:
+                            err_label = "자릿수 비교 오류"
                             st.error("💡 아쉽지만 다시 생각해 볼까? **한 자릿수(1~9)**보다 **두 자릿수(10~99)**가 항상 더 커요!")
                         elif st.session_state.m1_stage == 3:
                             if (num_left // 10) != (num_right // 10):
+                                err_label = "십의 자리 비교 오류"
                                 st.error("💡 아쉽지만 다시 생각해 볼까? 두 자릿수는 **십의 자리(앞자리) 숫자**가 큰 쪽이 더 커요!")
                             else:
+                                err_label = "일의 자리 비교 오류"
                                 st.error("💡 십의 자리 숫자가 같네요! 이럴 때는 **일의 자리(뒷자리) 숫자** 크기를 비교해 보세요!")
                         else:
+                            err_label = "한 자릿수 크기 비교 오류"
                             st.error("💡 아쉽지만 다시 한번 수의 순서를 떠올리며 비교해 볼까?")
+                        
+                        log_attempt("수학", "수 크기 비교", f"{num_left} ○ {num_right}", user_answer, False, err_label)
                 
                 st.write("")
                 if st.button("🔄 다른 숫자로 바꾸기", key="skip_m1_btn"):
@@ -610,10 +656,8 @@ if mode == "학생용":
             prob = st.session_state.m2_prob
             q_idx = st.session_state.m2_q_count
             
-            # 문제 텍스트 강조 박스
             st.info(f"📖 **문제:** {prob['text']}")
             
-            # 기본 숫자 식 입력 영역
             st.write("문제에 알맞은 숫자와 기호를 넣어 식을 세워보자!")
             col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 1, 2])
             with col1:
@@ -627,13 +671,11 @@ if mode == "학생용":
             with col5:
                 ans_in = st.text_input("정답", key=f"m_ans_{q_idx}")
             
-            # 힌트 보기 버튼 (클릭 시 그림 변환 UI 활성화)
             if not st.session_state.m2_show_hint:
                 if st.button("💡 힌트 보기 (그림으로 알아보기)", key=f"m2_hint_btn_{q_idx}"):
                     st.session_state.m2_show_hint = True
                     st.rerun()
             
-            # 힌트 보기 활성화 시: 글로 된 문제를 이모지 그림으로 변환하여 제시
             hint_op_in = "선택"
             hint_ans_in = ""
             if st.session_state.m2_show_hint:
@@ -664,7 +706,6 @@ if mode == "학생용":
             
             st.write("")
             
-            # 정답 완료 상태일 때
             if st.session_state.m2_solved:
                 st.balloons()
                 st.success(f"🎉 참 잘했어요! **{prob['n1']} {prob['op']} {prob['n2']} = {prob['ans']}**, 정확하게 풀었네요!")
@@ -675,7 +716,6 @@ if mode == "학생용":
                     st.session_state.m2_q_count += 1
                     st.rerun()
             
-            # 아직 풀이 중일 때: 정답 확인 버튼 (숫자 식 OR 그림 힌트 식 둘 중 하나만 맞게 입력해도 정답 처리)
             else:
                 if st.button("정답 확인하기", key="math_btn_2", type="primary"):
                     main_filled = (num1_in.strip() != "" or num2_in.strip() != "" or ans_in.strip() != "" or op_in != "선택")
@@ -686,25 +726,31 @@ if mode == "학생용":
                     else:
                         is_correct = False
                         feedback_msg = ""
+                        err_category = ""
+                        recorded_ans = ""
                         
-                        # 1) 그림 힌트 칸에 기호와 답을 입력한 경우 우선 검증
+                        # 1) 그림 힌트 칸 검증
                         if hint_filled:
+                            recorded_ans = f"[그림 힌트] {hint_op_in} {hint_ans_in.strip()}"
                             if hint_op_in == "선택" or hint_ans_in.strip() == "":
                                 feedback_msg = "💡 그림 힌트의 **기호(+, -)**와 **정답** 칸을 모두 채워주세요!"
                             elif not hint_ans_in.strip().isdigit():
                                 feedback_msg = "💡 정답 칸에는 숫자만 입력해 주세요!"
                             elif hint_op_in != prob["op"]:
+                                err_category = "연산 기호(+/-) 오류"
                                 if prob["op"] == "+":
                                     feedback_msg = "💡 모두 합하면 몇 개인지 묻는 문제예요. 더하기(+) 기호를 선택해 볼까요?"
                                 else:
                                     feedback_msg = "💡 먹거나 주어서 줄어들거나 차이를 묻는 문제예요. 빼기(-) 기호를 선택해 볼까요?"
                             elif int(hint_ans_in.strip()) != prob["ans"]:
+                                err_category = "수 세기·계산 오류"
                                 feedback_msg = "💡 기호는 정확하게 골랐어요! 위의 그림 개수를 손가락으로 하나씩 짚어가며 다시 세어볼까요?"
                             else:
                                 is_correct = True
                         
-                        # 2) 위쪽 기본 숫자 식 칸에 입력한 경우 검증
+                        # 2) 기본 숫자 식 칸 검증
                         if not is_correct and main_filled:
+                            recorded_ans = f"{num1_in.strip()} {op_in} {num2_in.strip()} = {ans_in.strip()}"
                             if num1_in.strip() == "" or op_in == "선택" or num2_in.strip() == "" or ans_in.strip() == "":
                                 if not feedback_msg:
                                     feedback_msg = "💡 첫 번째 숫자, 기호, 두 번째 숫자, 정답 빈칸을 모두 채워주세요!"
@@ -715,26 +761,31 @@ if mode == "학생용":
                                 u_n2 = int(num2_in.strip())
                                 u_ans = int(ans_in.strip())
                                 
-                                # 덧셈은 앞뒤 순서 교환(예: 2+3=5)도 정답으로 인정
                                 nums_ok = ((u_n1 == prob["n1"] and u_n2 == prob["n2"]) or
                                            (prob["op"] == "+" and u_n1 == prob["n2"] and u_n2 == prob["n1"]))
                                 
                                 if not nums_ok:
+                                    err_category = "문장제 숫자 추출 오류"
                                     feedback_msg = "💡 문제에 나온 두 숫자를 다시 한번 잘 살펴볼까요? 필요하다면 아래 **'힌트 보기'** 버튼을 눌러보세요!"
                                 elif op_in != prob["op"]:
+                                    err_category = "연산 기호(+/-) 오류"
                                     if prob["op"] == "+":
                                         feedback_msg = "💡 숫자는 잘 찾았어요! 모두 합하는 문제이니 **더하기(+)** 기호를 선택해 볼까요?"
                                     else:
                                         feedback_msg = "💡 숫자는 잘 찾았어요! 줄어들거나 차이를 구하는 문제이니 **빼기(-)** 기호를 선택해 볼까요?"
                                 elif u_ans != prob["ans"]:
+                                    err_category = "수 세기·계산 오류"
                                     feedback_msg = "💡 식은 아주 잘 세웠어요! 계산 결과만 다시 한번 확인해 볼까요? 아래 **'힌트 보기'**를 누르면 그림으로 세어볼 수 있어요!"
                                 else:
                                     is_correct = True
                         
                         if is_correct:
+                            log_attempt("수학", "문장제 식 세우기", prob["text"], recorded_ans, True, "없음", hint_used=st.session_state.m2_show_hint)
                             st.session_state.m2_solved = True
                             st.rerun()
                         else:
+                            if err_category:
+                                log_attempt("수학", "문장제 식 세우기", prob["text"], recorded_ans, False, err_category, hint_used=st.session_state.m2_show_hint)
                             st.error(feedback_msg)
                 
                 st.write("")
@@ -745,9 +796,128 @@ if mode == "학생용":
                     st.rerun()
 
 # ==========================================
-# 2. 교사용 화면
+# 2. 교사용 화면 (학습 데이터 분석 대시보드)
 # ==========================================
 elif mode == "교사용":
     st.title("👩‍🏫 교사 대시보드")
-    st.write("학생들의 학습 현황과 성장 기록을 확인합니다.")
-    st.info("이곳에는 학생이 자주 틀리는 글자나 연산 오류를 분석한 데이터가 표시될 예정입니다.")
+    st.write("학생의 실시간 학습 현황과 난독증·난산증 오류 패턴을 분석하여 개별화 지도를 지원합니다.")
+    
+    # 상단 컨트롤 바: 시연용 샘플 데이터 포함 여부 및 기록 초기화
+    ctrl_col1, ctrl_col2 = st.columns([3, 1])
+    with ctrl_col1:
+        include_sample = st.checkbox(
+            "📊 시연용 샘플 학생 데이터 함께 보기 (학생용 탭에서 문제를 풀면 상단에 실시간 누적됩니다)",
+            value=True
+        )
+    with ctrl_col2:
+        if st.button("🗑️ 실시간 기록 초기화", use_container_width=True):
+            st.session_state.learning_logs = []
+            st.rerun()
+            
+    # 데이터 병합
+    combined_logs = list(st.session_state.learning_logs)
+    if include_sample:
+        combined_logs.extend(SAMPLE_LOGS)
+        
+    st.divider()
+    
+    if len(combined_logs) == 0:
+        st.info("📭 아직 기록된 학습 데이터가 없습니다. 왼쪽 메뉴에서 **'학생용'**으로 이동해 문제를 풀거나, 위쪽의 **'시연용 샘플 학생 데이터 함께 보기'**를 체크해 주세요.")
+    else:
+        df = pd.DataFrame(combined_logs)
+        
+        # 1. 핵심 지표(KPI) 요약
+        total_cnt = len(df)
+        correct_cnt = len(df[df["결과"] == "정답"])
+        overall_acc = round((correct_cnt / total_cnt) * 100, 1)
+        
+        kr_df = df[df["영역"] == "국어"]
+        kr_acc = round((len(kr_df[kr_df["결과"] == "정답"]) / len(kr_df)) * 100, 1) if len(kr_df) > 0 else 0.0
+        
+        math_df = df[df["영역"] == "수학"]
+        math_acc = round((len(math_df[math_df["결과"] == "정답"]) / len(math_df)) * 100, 1) if len(math_df) > 0 else 0.0
+        
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        kpi1.metric("총 학습 문항 수", f"{total_cnt}문항")
+        kpi2.metric("전체 정답률", f"{overall_acc}%", f"{correct_cnt}/{total_cnt} 정답")
+        kpi3.metric("📖 국어(읽기) 정답률", f"{kr_acc}%", f"총 {len(kr_df)}회 시도")
+        kpi4.metric("🧮 수학(연산) 정답률", f"{math_acc}%", f"총 {len(math_df)}회 시도")
+        
+        st.divider()
+        
+        # 2. 영역별 오류 유형 시각화 분석
+        st.subheader("📈 영역별 오답 원인 분석")
+        chart_col1, chart_col2 = st.columns(2)
+        
+        with chart_col1:
+            st.markdown("#### 📖 국어 (난독증 읽기 오류 패턴)")
+            kr_errors = kr_df[kr_df["결과"] == "오답"]
+            if len(kr_errors) > 0:
+                kr_err_counts = kr_errors["오류 유형"].value_counts().reset_index()
+                kr_err_counts.columns = ["오류 유형", "오답 횟수"]
+                st.bar_chart(kr_err_counts.set_index("오류 유형"), color="#FF6B6B")
+            else:
+                st.success("🎉 국어 영역에서 발생한 오답이 없습니다!")
+                
+        with chart_col2:
+            st.markdown("#### 🧮 수학 (난산증 수 개념·연산 오류 패턴)")
+            math_errors = math_df[math_df["결과"] == "오답"]
+            if len(math_errors) > 0:
+                math_err_counts = math_errors["오류 유형"].value_counts().reset_index()
+                math_err_counts.columns = ["오류 유형", "오답 횟수"]
+                st.bar_chart(math_err_counts.set_index("오류 유형"), color="#4D96FF")
+            else:
+                st.success("🎉 수학 영역에서 발생한 오답이 없습니다!")
+                
+        st.divider()
+        
+        # 3. 개별화 지도(IEP) 맞춤형 교육 처방 제안
+        st.subheader("💡 누적 데이터 기반 맞춤형 지도 제안")
+        guide_col1, guide_col2 = st.columns(2)
+        
+        with guide_col1:
+            kr_errors = kr_df[kr_df["결과"] == "오답"]
+            if len(kr_errors) > 0:
+                top_kr_err = kr_errors["오류 유형"].value_counts().idxmax()
+                if "자음" in top_kr_err:
+                    st.warning(f"**[국어 집중 지도: {top_kr_err}]**\n\n예사소리(`ㅂ, ㄷ, ㄱ`)와 거센소리(`ㅍ, ㅌ, ㅋ`) 변별에 어려움이 보입니다. 목에 손을 대고 바람이 터지는 느낌을 비교하며 1단계 단음절 카드를 반복 연습하도록 지도해 주세요.")
+                elif "모음" in top_kr_err:
+                    st.warning(f"**[국어 집중 지도: {top_kr_err}]**\n\n입술 모양에 따른 단모음(`ㅗ/ㅜ`, `ㅏ/ㅓ`) 구별이 흔들리고 있습니다. 거울을 보며 입 모양 크기를 과장해 소리 내는 조음 훈련을 권장합니다.")
+                elif "받침" in top_kr_err:
+                    st.warning(f"**[국어 집중 지도: {top_kr_err}]**\n\n끝소리(종성)를 탈락시키고 모음으로만 발음하는 경향이 있습니다. 글자 끝에서 혀나 입술을 닫아 소리를 멈추는 연습이 필요합니다.")
+                else:
+                    st.warning(f"**[국어 집중 지도: {top_kr_err}]**\n\n조사나 어절 경계를 붙여 읽어 문장 의미 파악에 오류가 발생합니다. 빗금(`/`)이 표시된 2어절 문장부터 끊어 읽는 호흡 훈련을 진행해 주세요.")
+            else:
+                st.info("**[국어 지도 안내]** 현재까지 읽기 정확도가 매우 우수합니다. 3어절 문장 읽기 단계로 확장해 유창성을 길러주세요.")
+                
+        with guide_col2:
+            math_errors = math_df[math_df["결과"] == "오답"]
+            hint_used_cnt = len(math_df[math_df["힌트 사용"] == "사용"])
+            if len(math_errors) > 0:
+                top_math_err = math_errors["오류 유형"].value_counts().idxmax()
+                if "자릿수" in top_math_err or "십의 자리" in top_math_err:
+                    st.warning(f"**[수학 집중 지도: {top_math_err}]**\n\n수의 자릿값 개념보다 개별 숫자의 크기(`9 > 1`)만 보고 판단하는 오류가 나타납니다. 십 모형(10개 묶음)과 낱개 모형을 나란히 놓고 비교하는 구체물 활동을 병행해 주세요.")
+                elif "연산 기호" in top_math_err:
+                    st.warning(f"**[수학 집중 지도: {top_math_err}]**\n\n문장제 속 상황을 덧셈(`+`)과 뺄셈(`-`) 기호로 연결하는 데 혼동이 있습니다. '모두', '더 왔습니다'와 '먹었습니다', '남은' 같은 핵심 어휘에 동그라미 치며 식을 세우도록 지도해 주세요.")
+                else:
+                    st.warning(f"**[수학 집중 지도: {top_math_err}]**\n\n식은 바르게 세웠으나 수 세기 과정에서 일대일 대응 오류가 발생합니다. 현재 그림 힌트를 **{hint_used_cnt}회** 활용했으므로, 화면 속 그림을 하나씩 짚으며 세는 연습을 충분히 제공해 주세요.")
+            else:
+                st.info(f"**[수학 지도 안내]** 수 크기 비교 및 문장제 식 세우기를 안정적으로 수행하고 있습니다. (그림 힌트 활용: {hint_used_cnt}회)")
+                
+        st.divider()
+        
+        # 4. 상세 학습 이력 테이블 및 CSV 내보내기
+        st.subheader("📋 학생 상세 풀이 이력")
+        
+        filter_subj = st.radio("영역별 필터:", ["전체", "국어", "수학"], horizontal=True)
+        filtered_df = df if filter_subj == "전체" else df[df["영역"] == filter_subj]
+        
+        st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+        
+        csv_data = filtered_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="📥 학습 분석 리포트(CSV) 다운로드",
+            data=csv_data,
+            file_name=f"학습분석리포트_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
