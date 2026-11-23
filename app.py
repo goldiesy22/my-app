@@ -12,7 +12,7 @@ client = OpenAI(api_key=API_KEY)
 st.set_page_config(page_title="맞춤형 기초학력 지원 앱", layout="wide")
 
 # ==========================================
-# 한글 음소(초성·중성·종성) 및 문제 출제 데이터
+# 1. 한 글자 읽기 데이터 (초·중·종성 및 출제 목록)
 # ==========================================
 CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
 JUNGSUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
@@ -49,11 +49,62 @@ def generate_word(stage, exclude_word=None):
             return word
 
 # ==========================================
+# 2. 띄어 읽기 연습 데이터 (초등 1~2학년 수준 2어절 / 3어절)
+# ==========================================
+SENTENCES_2_EOJEOL = [
+    "나비가 날아간다.",
+    "강아지가 달린다.",
+    "꽃이 피었습니다.",
+    "구름이 흘러간다.",
+    "바람이 붑니다.",
+    "아기가 웃습니다.",
+    "새가 노래한다.",
+    "비가 내립니다.",
+    "사과가 맛있습니다.",
+    "학교에 갑니다.",
+    "책을 읽습니다.",
+    "친구를 만났습니다.",
+    "별이 반짝인다.",
+    "나무가 자랍니다.",
+    "고양이가 잠잔다."
+]
+
+SENTENCES_3_EOJEOL = [
+    "아버지가 방에 들어가신다.",
+    "아기가 방에서 놀아요.",
+    "동생이 우유를 마신다.",
+    "고양이가 생선을 먹는다.",
+    "선생님이 책을 읽으신다.",
+    "친구가 공을 던진다.",
+    "엄마가 사과를 깎으신다.",
+    "다람쥐가 도토리를 줍는다.",
+    "개구리가 연못에 빠졌다.",
+    "하늘에 무지개가 떴다.",
+    "아이들이 운동장에서 논다.",
+    "참새가 나무에 앉았다.",
+    "할머니가 꽃을 가꾸신다.",
+    "우리가 교실을 청소한다.",
+    "형아가 연을 날린다."
+]
+
+def generate_sentence(stage, exclude_sentence=None):
+    """2어절 또는 3어절 랜덤 문장을 생성하되 직전 문장과 겹치지 않게 반환"""
+    pool = SENTENCES_2_EOJEOL if stage == 1 else SENTENCES_3_EOJEOL
+    while True:
+        sentence = random.choice(pool)
+        if sentence != exclude_sentence:
+            return sentence
+
+def format_slash_hint(sentence):
+    """문장의 어절 사이에 빗금(/)을 자동으로 삽입하여 반환"""
+    end_punct = sentence[-1] if sentence[-1] in [".", "!", "?"] else ""
+    body = sentence[:-1] if end_punct else sentence
+    return " / ".join(body.split()) + end_punct
+
+# ==========================================
 # 세션 상태(Session State) 초기화
 # ==========================================
-if "show_slash_hint" not in st.session_state:
-    st.session_state.show_slash_hint = False
-
+# [국어 1] 비슷한 글자 찾기 상태
 if "k1_stage" not in st.session_state:
     st.session_state.k1_stage = 1  # 1: 받침 없는 글자, 2: 받침 있는 글자
 if "k1_streak" not in st.session_state:
@@ -68,6 +119,20 @@ if "k1_last_spoken" not in st.session_state:
     st.session_state.k1_last_spoken = ""
 if "k1_leveled_up" not in st.session_state:
     st.session_state.k1_leveled_up = False
+
+# [국어 2] 띄어 읽기 연습 상태
+if "k2_stage" not in st.session_state:
+    st.session_state.k2_stage = 1  # 1: 2어절, 2: 3어절
+if "k2_target" not in st.session_state:
+    st.session_state.k2_target = generate_sentence(1)
+if "k2_solved" not in st.session_state:
+    st.session_state.k2_solved = False
+if "k2_q_count" not in st.session_state:
+    st.session_state.k2_q_count = 0
+if "k2_last_spoken" not in st.session_state:
+    st.session_state.k2_last_spoken = ""
+if "show_slash_hint" not in st.session_state:
+    st.session_state.show_slash_hint = False
 
 # --- 왼쪽 사이드바 (메뉴 선택) ---
 st.sidebar.title("메뉴 선택")
@@ -88,6 +153,9 @@ if mode == "학생용":
         korean_choice = st.radio("어떤 연습을 할까요?", ["1. 비슷한 글자 찾기", "2. 띄어 읽기 연습"], horizontal=True)
         st.divider() # 구분선
         
+        # ------------------------------------------
+        # [국어 1] 비슷한 글자 찾기
+        # ------------------------------------------
         if korean_choice == "1. 비슷한 글자 찾기":
             st.subheader("1. 비슷한 글자 찾기 연습")
             
@@ -261,84 +329,130 @@ if mode == "학생용":
                     st.session_state.k1_target = generate_word(st.session_state.k1_stage, exclude_word=target_word)
                     st.session_state.k1_q_count += 1
                     st.rerun()
-                            
+
+        # ------------------------------------------
+        # [국어 2] 띄어 읽기 연습
+        # ------------------------------------------
         elif korean_choice == "2. 띄어 읽기 연습":
             st.subheader("2. 알맞게 띄어 읽기 연습")
-            st.write("문장의 뜻이 잘 통하게 띄어 읽어보자!")
             
+            # 학생이 직접 2어절 / 3어절 선택
+            eojeol_options = ["1단계: 2어절 문장 (예: 나비가 날아간다)", "2단계: 3어절 문장 (예: 아버지가 방에 들어가신다)"]
+            selected_eojeol_label = st.radio(
+                "연습할 문장 길이를 선택하세요:",
+                eojeol_options,
+                index=st.session_state.k2_stage - 1,
+                horizontal=True
+            )
+            selected_eojeol_stage = 1 if selected_eojeol_label == eojeol_options[0] else 2
+            
+            # 학생이 어절 단계를 바꿨을 때 새 문장으로 즉시 전환
+            if selected_eojeol_stage != st.session_state.k2_stage:
+                st.session_state.k2_stage = selected_eojeol_stage
+                st.session_state.k2_target = generate_sentence(selected_eojeol_stage)
+                st.session_state.k2_solved = False
+                st.session_state.k2_last_spoken = ""
+                st.session_state.show_slash_hint = False
+                st.session_state.k2_q_count += 1
+                st.rerun()
+            
+            st.write("문장의 뜻이 잘 통하게 의미 단위로 띄어 읽어보자!")
+            
+            target_sentence = st.session_state.k2_target
             text_placeholder = st.empty()
             hint_placeholder = st.empty()
             
-            if st.session_state.show_slash_hint:
-                text_placeholder.markdown("<h2 style='text-align: center; color: #FF4B4B;'>아버지가 / 방에 / 들어가신다.</h2>", unsafe_allow_html=True)
-                hint_placeholder.info("💡 선생님 힌트: 빗금(/)이 있는 곳에서 숨을 살짝 고르고 다시 읽어볼까요?")
-            else:
-                text_placeholder.markdown("<h2 style='text-align: center;'>아버지가 방에 들어가신다.</h2>", unsafe_allow_html=True)
-            
-            st.info("👇 마이크를 누르고 **아이콘이 빨간색으로 변하면** 읽어보세요. (다 읽은 뒤 한 번 더 클릭)")
-            
-            audio_bytes_2 = audio_recorder(
-                text="클릭해서 녹음 시작", 
-                icon_size="2x", 
-                pause_threshold=10.0,
-                key="k_mic_2"
-            )
-            
-            if audio_bytes_2:
-                st.audio(audio_bytes_2, format="audio/wav")
+            # 정답을 맞힌 상태일 때: 축하 메시지 + 다음 문장 버튼 표시
+            if st.session_state.k2_solved:
+                text_placeholder.markdown(f"<h2 style='text-align: center; margin: 20px 0;'>{target_sentence}</h2>", unsafe_allow_html=True)
+                if st.session_state.k2_last_spoken:
+                    st.info(f"🎤 학생이 낸 소리: **{st.session_state.k2_last_spoken}**")
+                st.success("🎉 참 잘했어요! 알맞게 띄어 읽어서 뜻이 잘 통하네요!")
                 
-                with st.spinner("AI 선생님이 목소리를 듣고 있어요... 🤖"):
-                    audio_file_2 = io.BytesIO(audio_bytes_2)
-                    audio_file_2.name = "record_2.wav"
-                    
-                    try:
-                        transcript_2 = client.audio.transcriptions.create(
-                            model="whisper-1", 
-                            file=audio_file_2,
-                            language="ko",
-                            prompt="아버지가 방에 들어가신다. 아버지 가방에 들어가신다."
-                        )
-                        
-                        spoken_text_2 = transcript_2.text.strip()
-                        clean_text_2 = spoken_text_2.replace(".", "").replace(",", "").replace("!", "").replace("?", "")
-                        st.info(f"🎤 학생이 낸 소리: **{clean_text_2}**")
-                        
-                        if "가방에" in clean_text_2:
-                            st.error("💡 아뿔싸! 아버지가 '가방'에 들어가셨네요. 띄어 읽기가 잘못되어 뜻이 달라졌어요.")
-                            st.session_state.show_slash_hint = True
-                            
-                            text_placeholder.markdown("<h2 style='text-align: center; color: #FF4B4B;'>아버지가 / 방에 / 들어가신다.</h2>", unsafe_allow_html=True)
-                            hint_placeholder.info("💡 선생님 힌트: 빗금(/)이 있는 곳에서 숨을 살짝 고르고 다시 읽어볼까요?")
-                        
-                        elif "아버지가" in clean_text_2 and "방에" in clean_text_2:
-                            st.success("🎉 참 잘했어요! 알맞게 띄어 읽어서 뜻이 잘 통하네요!")
-                            st.session_state.show_slash_hint = False
-                        
-                        else:
-                            st.warning("💡 음, 글자를 잘못 읽었거나 띄어 읽기가 어색해요. 다시 한번 또박또박 읽어볼까요?")
-                            st.session_state.show_slash_hint = True
-                            
-                            text_placeholder.markdown("<h2 style='text-align: center; color: #FF4B4B;'>아버지가 / 방에 / 들어가신다.</h2>", unsafe_allow_html=True)
-                            hint_placeholder.info("💡 선생님 힌트: 빗금(/)이 있는 곳에서 숨을 살짝 고르고 다시 읽어볼까요?")
-                            
-                    except Exception as e:
-                        if "audio_too_short" in str(e):
-                            st.warning("⚠️ 녹음된 소리가 너무 짧거나 마이크가 인식되지 않았어요. 마이크 상태를 확인해 주세요!")
-                        else:
-                            st.error(f"❌ 시스템 오류가 발생했습니다: {e}")
-
-            st.divider()
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("❌ (테스트용) 오답 감지 시뮬레이션", key="test_btn_1"):
-                    st.session_state.show_slash_hint = True
+                if st.button("➡️ 다음 문장 연습하기", type="primary", use_container_width=True):
+                    st.session_state.k2_target = generate_sentence(st.session_state.k2_stage, exclude_sentence=target_sentence)
+                    st.session_state.k2_solved = False
+                    st.session_state.k2_last_spoken = ""
+                    st.session_state.show_slash_hint = False
+                    st.session_state.k2_q_count += 1
                     st.rerun()
-            with col2:
+            
+            # 아직 문제를 푸는 중일 때: 문장 표시(오류 시 빗금 힌트) 및 음성 인식 실행
+            else:
                 if st.session_state.show_slash_hint:
-                    if st.button("🔄 다시 처음으로 (힌트 숨기기)", key="reset_btn_1"):
-                        st.session_state.show_slash_hint = False
-                        st.rerun()
+                    slashed_sentence = format_slash_hint(target_sentence)
+                    text_placeholder.markdown(f"<h2 style='text-align: center; color: #FF4B4B; margin: 20px 0;'>{slashed_sentence}</h2>", unsafe_allow_html=True)
+                    hint_placeholder.info("💡 선생님 힌트: 빗금(/)이 있는 곳에서 숨을 살짝 고르고 다시 읽어볼까요?")
+                else:
+                    text_placeholder.markdown(f"<h2 style='text-align: center; margin: 20px 0;'>{target_sentence}</h2>", unsafe_allow_html=True)
+                
+                st.info("👇 마이크를 누르고 **아이콘이 빨간색으로 변하면** 읽어보세요. (다 읽은 뒤 한 번 더 클릭)")
+                
+                audio_bytes_2 = audio_recorder(
+                    text="클릭해서 녹음 시작", 
+                    icon_size="2x", 
+                    pause_threshold=10.0,
+                    key=f"k_mic_2_{st.session_state.k2_q_count}"
+                )
+                
+                if audio_bytes_2:
+                    st.audio(audio_bytes_2, format="audio/wav")
+                    
+                    with st.spinner("AI 선생님이 목소리를 듣고 있어요... 🤖"):
+                        audio_file_2 = io.BytesIO(audio_bytes_2)
+                        audio_file_2.name = "record_2.wav"
+                        
+                        try:
+                            # 띄어 읽기 오류 감지를 위해 의도적으로target_sentence 자체를 프롬프트에 넣지 않고 일반 안내만 제공
+                            stt_prompt_2 = "초등학교 국어 읽기 연습입니다. 아버지가 방에 들어가신다. 아버지 가방에 들어가신다. 띄어 읽기에 주의하며 읽은 소리입니다."
+                            
+                            transcript_2 = client.audio.transcriptions.create(
+                                model="whisper-1", 
+                                file=audio_file_2,
+                                language="ko",
+                                prompt=stt_prompt_2
+                            )
+                            
+                            spoken_text_2 = transcript_2.text.strip()
+                            clean_spoken_2 = spoken_text_2.replace(".", "").replace(",", "").replace("!", "").replace("?", "").strip()
+                            clean_target_2 = target_sentence.replace(".", "").replace(",", "").replace("!", "").replace("?", "").strip()
+                            
+                            st.info(f"🎤 학생이 낸 소리: **{clean_spoken_2}**")
+                            
+                            spoken_words = clean_spoken_2.split()
+                            target_words = clean_target_2.split()
+                            
+                            # 어절(띄어쓰기)과 글자가 모두 정확히 일치하는 경우 정답 처리
+                            if spoken_words == target_words:
+                                st.session_state.k2_solved = True
+                                st.session_state.k2_last_spoken = clean_spoken_2
+                                st.session_state.show_slash_hint = False
+                                st.rerun()
+                            else:
+                                st.session_state.show_slash_hint = True
+                                slashed_sentence = format_slash_hint(target_sentence)
+                                text_placeholder.markdown(f"<h2 style='text-align: center; color: #FF4B4B; margin: 20px 0;'>{slashed_sentence}</h2>", unsafe_allow_html=True)
+                                hint_placeholder.info("💡 선생님 힌트: 빗금(/)이 있는 곳에서 숨을 살짝 고르고 다시 읽어볼까요?")
+                                
+                                if "가방에" in clean_spoken_2 and "방에" in clean_target_2:
+                                    st.error("💡 아뿔싸! 아버지가 '가방'에 들어가셨네요. 띄어 읽기가 잘못되어 뜻이 달라졌어요.")
+                                elif "".join(spoken_words) == "".join(target_words):
+                                    st.warning("💡 글자는 정확히 읽었지만 띄어 읽기가 어색해요. 빗금(/) 표시가 있는 곳에서 잠깐 멈추어 다시 읽어볼까요?")
+                                else:
+                                    st.warning("💡 음, 글자를 잘못 읽었거나 띄어 읽기가 어색해요. 빗금(/) 표시를 보며 의미 단위로 끊어서 다시 읽어볼까요?")
+                                
+                        except Exception as e:
+                            if "audio_too_short" in str(e):
+                                st.warning("⚠️ 녹음된 소리가 너무 짧거나 마이크가 인식되지 않았어요. 마이크 상태를 확인해 주세요!")
+                            else:
+                                st.error(f"❌ 시스템 오류가 발생했습니다: {e}")
+
+                st.write("")
+                if st.button("🔄 다른 문장으로 바꾸기", key="skip_sentence_btn"):
+                    st.session_state.k2_target = generate_sentence(st.session_state.k2_stage, exclude_sentence=target_sentence)
+                    st.session_state.show_slash_hint = False
+                    st.session_state.k2_q_count += 1
+                    st.rerun()
 
     # --- 수학 학습 탭 ---
     with tab_math:
