@@ -18,9 +18,9 @@ CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ',
 JUNGSUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
 JONGSUNG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
 
-# 1단계용: 기본 자음 14개 + 소리값이 명확한 기본 모음 10개
+# 1단계용: 쌍자음 제외 기본 자음 14개 + 이중모음(ㅑ, ㅕ, ㅛ, ㅠ 등) 제외 기본 단모음 6개
 BASIC_CHO = ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
-BASIC_JUNG = ['ㅏ', 'ㅑ', 'ㅓ', 'ㅕ', 'ㅗ', 'ㅛ', 'ㅜ', 'ㅠ', 'ㅡ', 'ㅣ']
+BASIC_JUNG = ['ㅏ', 'ㅓ', 'ㅗ', 'ㅜ', 'ㅡ', 'ㅣ']
 
 # 2단계용: 실제 존재하며 글자 그대로 소리 나는(받침 ㄱ, ㄴ, ㄹ, ㅁ, ㅂ, ㅇ) 단음절 목록
 STAGE2_WORDS = [
@@ -95,7 +95,7 @@ if mode == "학생용":
             col_stat1, col_stat2 = st.columns([2, 1])
             with col_stat1:
                 if st.session_state.k1_stage == 1:
-                    st.markdown("🌱 **현재 단계: 1단계 (자음 + 모음)** — *5개 연속 맞히면 받침 있는 글자로 넘어가요!*")
+                    st.markdown("🌱 **현재 단계: 1단계 (기본 자음 + 기본 모음)** — *5개 연속 맞히면 받침 있는 글자로 넘어가요!*")
                     st.progress(min(st.session_state.k1_streak / 5, 1.0))
                 else:
                     st.markdown("🌳 **현재 단계: 2단계 (자음 + 모음 + 받침)** — *받침 소리까지 정확히 읽어보자!*")
@@ -146,12 +146,17 @@ if mode == "학생용":
                         audio_file.name = "record.wav"
                         
                         try:
-                            # 음성 인식(STT) - 현재 문제 글자와 유사 음절 힌트 제공
+                            # 단계에 맞춰 음성 인식(STT) 힌트 프롬프트 최적화
+                            if st.session_state.k1_stage == 1:
+                                stt_prompt = f"{target_word}. {target_word}, {target_word}, {target_word}. 가, 나, 다, 라, 마, 바, 보, 사, 아, 자. 받침 없는 한 글자 발음입니다."
+                            else:
+                                stt_prompt = f"{target_word}. {target_word}, {target_word}, {target_word}. 강, 공, 달, 물, 별, 봄, 산, 손, 집, 책. 받침 있는 한 글자 발음입니다."
+                            
                             transcript = client.audio.transcriptions.create(
                                 model="whisper-1", 
                                 file=audio_file,
                                 language="ko",
-                                prompt=f"{target_word}. {target_word}, {target_word}, {target_word}. 가, 나, 다, 강, 공, 달, 물, 산. 한 글자 단독 발음 또는 같은 글자 반복 발음입니다."
+                                prompt=stt_prompt
                             )
                             
                             spoken_text = transcript.text.strip()
@@ -321,47 +326,4 @@ if mode == "학생용":
         
         if math_choice == "1. 알맞은 말과 기호 찾기":
             st.subheader("1. 알맞은 말과 기호 찾기")
-            st.write("두 숫자 사이에 들어갈 알맞은 말을 골라보자!")
-            
-            col_a, col_b, col_c = st.columns([1, 2, 1])
-            with col_a:
-                st.markdown("<h1 style='text-align: center;'>5</h1>", unsafe_allow_html=True)
-            with col_b:
-                user_answer = st.selectbox("어느 쪽이 더 클까?", ["선택하세요", "크다 (>)", "작다 (<)", "같다 (=)"])
-            with col_c:
-                st.markdown("<h1 style='text-align: center;'>3</h1>", unsafe_allow_html=True)
-            
-            if st.button("정답 확인하기", key="math_btn_1"):
-                if user_answer == "크다 (>)":
-                    st.success("정답이야! 5가 3보다 크지!")
-                elif user_answer == "선택하세요":
-                    st.warning("알맞은 말을 먼저 선택해 줘.")
-                else:
-                    st.error("아쉽지만 다시 한번 생각해 볼까?")
-                
-        elif math_choice == "2. 차근차근 식 세우기":
-            st.subheader("2. 차근차근 식 세우기")
-            st.write("사과가 3개, 배가 2개 있습니다. 모두 몇 개일까요?")
-            
-            col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:
-                st.text_input("첫 번째 숫자", key="m_num1")
-            with col2:
-                st.selectbox("기호", ["+", "-", "*", "/"], key="m_op")
-            with col3:
-                st.text_input("두 번째 숫자", key="m_num2")
-            with col4:
-                st.markdown("<h3 style='text-align: center; margin-top: 30px;'>=</h3>", unsafe_allow_html=True)
-            with col5:
-                st.text_input("정답", key="m_ans")
-                
-            if st.button("정답 확인하기", key="math_btn_2"):
-                st.success("여기에 AI 선생님의 친절한 맞춤형 피드백이 뜰 거야!")
-
-# ==========================================
-# 2. 교사용 화면
-# ==========================================
-elif mode == "교사용":
-    st.title("👩‍🏫 교사 대시보드")
-    st.write("학생들의 학습 현황과 성장 기록을 확인합니다.")
-    st.info("이곳에는 학생이 자주 틀리는 글자나 연산 오류를 분석한 데이터가 표시될 예정입니다.")
+            st.write
