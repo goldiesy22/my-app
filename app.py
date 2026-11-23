@@ -403,8 +403,8 @@ if mode == "학생용":
                         audio_file_2.name = "record_2.wav"
                         
                         try:
-                            # 띄어 읽기 오류 감지를 위해 의도적으로target_sentence 자체를 프롬프트에 넣지 않고 일반 안내만 제공
-                            stt_prompt_2 = "초등학교 국어 읽기 연습입니다. 아버지가 방에 들어가신다. 아버지 가방에 들어가신다. 띄어 읽기에 주의하며 읽은 소리입니다."
+                            # 특정 문장에 편향되지 않도록 중립적인 안내 프롬프트 제공
+                            stt_prompt_2 = "초등학교 1, 2학년 국어 문장 읽기 연습입니다. 띄어 읽기에 주의하며 또박또박 읽은 소리입니다."
                             
                             transcript_2 = client.audio.transcriptions.create(
                                 model="whisper-1", 
@@ -434,12 +434,13 @@ if mode == "학생용":
                                 text_placeholder.markdown(f"<h2 style='text-align: center; color: #FF4B4B; margin: 20px 0;'>{slashed_sentence}</h2>", unsafe_allow_html=True)
                                 hint_placeholder.info("💡 선생님 힌트: 빗금(/)이 있는 곳에서 숨을 살짝 고르고 다시 읽어볼까요?")
                                 
-                                if "가방에" in clean_spoken_2 and "방에" in clean_target_2:
+                                # '아버지가 방에 들어가신다' 문장일 때만 전용 의미 왜곡 멘트 출력
+                                if "아버지가" in clean_target_2 and "가방에" in clean_spoken_2:
                                     st.error("💡 아뿔싸! 아버지가 '가방'에 들어가셨네요. 띄어 읽기가 잘못되어 뜻이 달라졌어요.")
                                 elif "".join(spoken_words) == "".join(target_words):
                                     st.warning("💡 글자는 정확히 읽었지만 띄어 읽기가 어색해요. 빗금(/) 표시가 있는 곳에서 잠깐 멈추어 다시 읽어볼까요?")
                                 else:
-                                    st.warning("💡 음, 글자를 잘못 읽었거나 띄어 읽기가 어색해요. 빗금(/) 표시를 보며 의미 단위로 끊어서 다시 읽어볼까요?")
+                                    st.warning("💡 음, 글자가 빠졌거나 띄어 읽기가 붙어서 다른 말처럼 들렸어요. 빗금(/) 표시를 보며 의미 단위로 끊어서 다시 읽어볼까요?")
                                 
                         except Exception as e:
                             if "audio_too_short" in str(e):
