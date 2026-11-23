@@ -4,8 +4,8 @@ from audio_recorder_streamlit import audio_recorder
 from collections import Counter
 import io
 
-# 💡 깃허브 유출 방지: API 키를 직접 적지 않고 Streamlit의 비밀 금고(Secrets)에서 가져옵니다.
-API_KEY = st.secrets["OPENAI_API_KEY"]
+# 💡 깃허브 유출 방지: Secrets에서 키를 가져오며 앞뒤 공백/줄바꿈 자동 제거
+API_KEY = st.secrets["OPENAI_API_KEY"].strip()
 client = OpenAI(api_key=API_KEY)
 
 st.set_page_config(page_title="맞춤형 기초학력 지원 앱", layout="wide")
@@ -108,7 +108,10 @@ if mode == "학생용":
                             st.error("💡 무슨 말인지 잘 못 들었어요. 다시 크고 또박또박 말해볼까요?")
                                 
                     except Exception as e:
-                        st.warning("⚠️ 녹음된 소리가 너무 짧거나 마이크가 인식되지 않았어요. 마이크 연결과 권한을 확인해 주세요!")
+                        if "audio_too_short" in str(e):
+                            st.warning("⚠️ 녹음된 소리가 너무 짧거나 마이크가 인식되지 않았어요. 마이크 연결과 권한을 확인해 주세요!")
+                        else:
+                            st.error(f"❌ 시스템 오류가 발생했습니다: {e}")
                             
         elif korean_choice == "2. 띄어 읽기 연습":
             st.subheader("2. 알맞게 띄어 읽기 연습")
@@ -170,7 +173,10 @@ if mode == "학생용":
                             hint_placeholder.info("💡 선생님 힌트: 빗금(/)이 있는 곳에서 숨을 살짝 고르고 다시 읽어볼까요?")
                             
                     except Exception as e:
-                        st.warning("⚠️ 녹음된 소리가 너무 짧거나 마이크가 인식되지 않았어요. 마이크 상태를 확인해 주세요!")
+                        if "audio_too_short" in str(e):
+                            st.warning("⚠️ 녹음된 소리가 너무 짧거나 마이크가 인식되지 않았어요. 마이크 상태를 확인해 주세요!")
+                        else:
+                            st.error(f"❌ 시스템 오류가 발생했습니다: {e}")
 
             st.divider()
             
