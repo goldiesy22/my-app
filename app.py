@@ -18,7 +18,7 @@ CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ',
 JUNGSUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
 JONGSUNG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
 
-# 1단계용: 쌍자음 제외 기본 자음 14개 + 이중모음(ㅑ, ㅕ, ㅛ, ㅠ 등) 제외 기본 단모음 6개
+# 1단계용: 쌍자음 제외 기본 자음 14개 + 이중모음 제외 기본 단모음 6개
 BASIC_CHO = ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
 BASIC_JUNG = ['ㅏ', 'ㅓ', 'ㅗ', 'ㅜ', 'ㅡ', 'ㅣ']
 
@@ -55,7 +55,7 @@ if "show_slash_hint" not in st.session_state:
     st.session_state.show_slash_hint = False
 
 if "k1_stage" not in st.session_state:
-    st.session_state.k1_stage = 1  # 1: 초성+중성, 2: 초성+중성+종성
+    st.session_state.k1_stage = 1  # 1: 받침 없는 글자, 2: 받침 있는 글자
 if "k1_streak" not in st.session_state:
     st.session_state.k1_streak = 0  # 연속 정답 횟수
 if "k1_target" not in st.session_state:
@@ -91,14 +91,35 @@ if mode == "학생용":
         if korean_choice == "1. 비슷한 글자 찾기":
             st.subheader("1. 비슷한 글자 찾기 연습")
             
+            # 학생이 직접 받침 없는 글자 / 받침 있는 글자 선택
+            stage_options = ["1단계: 받침 없는 글자", "2단계: 받침 있는 글자"]
+            selected_stage_label = st.radio(
+                "연습할 글자 종류를 선택하세요:",
+                stage_options,
+                index=st.session_state.k1_stage - 1,
+                horizontal=True
+            )
+            selected_stage = 1 if selected_stage_label == stage_options[0] else 2
+            
+            # 학생이 직접 단계를 바꿨을 때 새 문제로 즉시 전환
+            if selected_stage != st.session_state.k1_stage:
+                st.session_state.k1_stage = selected_stage
+                st.session_state.k1_streak = 0
+                st.session_state.k1_solved = False
+                st.session_state.k1_last_spoken = ""
+                st.session_state.k1_leveled_up = False
+                st.session_state.k1_target = generate_word(selected_stage)
+                st.session_state.k1_q_count += 1
+                st.rerun()
+            
             # 상단 단계 및 연속 정답 진행도 표시
             col_stat1, col_stat2 = st.columns([2, 1])
             with col_stat1:
                 if st.session_state.k1_stage == 1:
-                    st.markdown("🌱 **현재 단계: 1단계 (기본 자음 + 기본 모음)** — *5개 연속 맞히면 받침 있는 글자로 넘어가요!*")
-                    st.progress(min(st.session_state.k1_streak / 5, 1.0))
+                    st.markdown("🌱 **현재 단계: 받침 없는 글자** — *3개 연속 맞히면 받침 있는 글자로 넘어가요!*")
+                    st.progress(min(st.session_state.k1_streak / 3, 1.0))
                 else:
-                    st.markdown("🌳 **현재 단계: 2단계 (자음 + 모음 + 받침)** — *받침 소리까지 정확히 읽어보자!*")
+                    st.markdown("🌳 **현재 단계: 받침 있는 글자** — *받침 소리까지 정확히 읽어보자!*")
                     st.progress(1.0)
             with col_stat2:
                 st.metric(label="연속 정답 기록", value=f"{st.session_state.k1_streak}개 연속")
@@ -115,7 +136,7 @@ if mode == "학생용":
                 
                 if st.session_state.k1_leveled_up:
                     st.balloons()
-                    st.success("🎊 대단해요! 5개 연속 정답을 달성해서 이제 **받침이 있는 2단계 글자**로 올라갑니다!")
+                    st.success("🎊 대단해요! 3개 연속 정답을 달성해서 이제 **받침이 있는 글자**로 올라갑니다!")
                 else:
                     st.success("🎉 참 잘했어요! 정확하게 읽었네요!")
                 
@@ -175,8 +196,8 @@ if mode == "학생용":
                                     st.session_state.k1_last_spoken = spoken_text
                                     st.session_state.k1_streak += 1
                                     
-                                    # 1단계에서 연달아 5개 맞힌 경우 2단계로 승급
-                                    if st.session_state.k1_stage == 1 and st.session_state.k1_streak >= 5:
+                                    # 1단계에서 연달아 3개 맞힌 경우 2단계로 승급
+                                    if st.session_state.k1_stage == 1 and st.session_state.k1_streak >= 3:
                                         st.session_state.k1_stage = 2
                                         st.session_state.k1_leveled_up = True
                                     
@@ -326,4 +347,47 @@ if mode == "학생용":
         
         if math_choice == "1. 알맞은 말과 기호 찾기":
             st.subheader("1. 알맞은 말과 기호 찾기")
-            st.write
+            st.write("두 숫자 사이에 들어갈 알맞은 말을 골라보자!")
+            
+            col_a, col_b, col_c = st.columns([1, 2, 1])
+            with col_a:
+                st.markdown("<h1 style='text-align: center;'>5</h1>", unsafe_allow_html=True)
+            with col_b:
+                user_answer = st.selectbox("어느 쪽이 더 클까?", ["선택하세요", "크다 (>)", "작다 (<)", "같다 (=)"])
+            with col_c:
+                st.markdown("<h1 style='text-align: center;'>3</h1>", unsafe_allow_html=True)
+            
+            if st.button("정답 확인하기", key="math_btn_1"):
+                if user_answer == "크다 (>)":
+                    st.success("정답이야! 5가 3보다 크지!")
+                elif user_answer == "선택하세요":
+                    st.warning("알맞은 말을 먼저 선택해 줘.")
+                else:
+                    st.error("아쉽지만 다시 한번 생각해 볼까?")
+                
+        elif math_choice == "2. 차근차근 식 세우기":
+            st.subheader("2. 차근차근 식 세우기")
+            st.write("사과가 3개, 배가 2개 있습니다. 모두 몇 개일까요?")
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            with col1:
+                st.text_input("첫 번째 숫자", key="m_num1")
+            with col2:
+                st.selectbox("기호", ["+", "-", "*", "/"], key="m_op")
+            with col3:
+                st.text_input("두 번째 숫자", key="m_num2")
+            with col4:
+                st.markdown("<h3 style='text-align: center; margin-top: 30px;'>=</h3>", unsafe_allow_html=True)
+            with col5:
+                st.text_input("정답", key="m_ans")
+                
+            if st.button("정답 확인하기", key="math_btn_2"):
+                st.success("여기에 AI 선생님의 친절한 맞춤형 피드백이 뜰 거야!")
+
+# ==========================================
+# 2. 교사용 화면
+# ==========================================
+elif mode == "교사용":
+    st.title("👩‍🏫 교사 대시보드")
+    st.write("학생들의 학습 현황과 성장 기록을 확인합니다.")
+    st.info("이곳에는 학생이 자주 틀리는 글자나 연산 오류를 분석한 데이터가 표시될 예정입니다.")
